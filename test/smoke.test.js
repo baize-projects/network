@@ -752,7 +752,11 @@ test("uses panel login cookies and switches between SQLite Cloudflare accounts",
 
     if (request.method === "GET" && url.pathname === "/zones") {
       const zoneId =
-        request.headers["x-auth-key"] === "second-secret-key" ? "second-zone" : "first-zone";
+        request.headers["x-auth-key"] === "third-secret-key"
+          ? "third-zone"
+          : request.headers["x-auth-key"] === "second-secret-key"
+            ? "second-zone"
+            : "first-zone";
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(
         JSON.stringify({
@@ -902,11 +906,90 @@ test("uses panel login cookies and switches between SQLite Cloudflare accounts",
 
     assert.equal(switchedZonesResponse.status, 200);
     assert.equal(switchedZonesPayload.zones[0].id, "second-zone");
+
+    const noCsrfAddResponse = await fetch(
+      `http://127.0.0.1:${panelPort}/api/session/cloudflare-accounts`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: sessionCookie,
+        },
+        body: JSON.stringify({
+          cfApiKey: "blocked-secret-key",
+          cfEmail: "blocked@example.com",
+          cloudflareName: "未授权账号",
+        }),
+      }
+    );
+    const noCsrfAddPayload = await noCsrfAddResponse.json();
+
+    assert.equal(noCsrfAddResponse.status, 403);
+    assert.match(noCsrfAddPayload.error, /CSRF/);
+
+    const duplicateAddResponse = await fetch(
+      `http://127.0.0.1:${panelPort}/api/session/cloudflare-accounts`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: sessionCookie,
+          "X-CSRF-Token": switchPayload.csrfToken,
+        },
+        body: JSON.stringify({
+          cfApiKey: "duplicate-secret-key",
+          cfEmail: "FIRST@example.com",
+          cloudflareName: "重复账号",
+        }),
+      }
+    );
+    const duplicateAddPayload = await duplicateAddResponse.json();
+
+    assert.equal(duplicateAddResponse.status, 409);
+    assert.match(duplicateAddPayload.error, /已存在/);
+    assert.equal(JSON.stringify(duplicateAddPayload).includes("duplicate-secret-key"), false);
+
+    const addAccountResponse = await fetch(
+      `http://127.0.0.1:${panelPort}/api/session/cloudflare-accounts`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: sessionCookie,
+          "X-CSRF-Token": switchPayload.csrfToken,
+        },
+        body: JSON.stringify({
+          cfApiKey: "third-secret-key",
+          cfEmail: "third@example.com",
+          cloudflareName: "第三账号",
+        }),
+      }
+    );
+    const addAccountPayload = await addAccountResponse.json();
+
+    assert.equal(addAccountResponse.status, 201);
+    assert.equal(addAccountPayload.authenticated, true);
+    assert.equal(addAccountPayload.hasCredentials, true);
+    assert.equal(addAccountPayload.accounts.length, 3);
+    assert.equal(addAccountPayload.activeCloudflareAccount.name, "第三账号");
+    assert.equal(addAccountPayload.email, "th***@example.com");
+    assert.equal(JSON.stringify(addAccountPayload).includes("third-secret-key"), false);
+    const thirdAccountId = addAccountPayload.activeCloudflareAccount.id;
+    assert.match(thirdAccountId, /^cf_/);
+
+    const addedZonesResponse = await fetch(`http://127.0.0.1:${panelPort}/api/zones`, {
+      headers: { Cookie: sessionCookie },
+    });
+    const addedZonesPayload = await addedZonesResponse.json();
+
+    assert.equal(addedZonesResponse.status, 200);
+    assert.equal(addedZonesPayload.zones[0].id, "third-zone");
     assert.deepEqual(
       requests.map((request) => [request.path, request.email, request.key]),
       [
         ["/zones", "first@example.com", "first-secret-key"],
         ["/zones", "second@example.com", "second-secret-key"],
+        ["/zones", "third@example.com", "third-secret-key"],
       ]
     );
 
@@ -919,6 +1002,7 @@ test("uses panel login cookies and switches between SQLite Cloudflare accounts",
     assert.equal(historyResponse.status, 200);
     assert.equal(serializedHistory.includes("first-secret-key"), false);
     assert.equal(serializedHistory.includes("second-secret-key"), false);
+    assert.equal(serializedHistory.includes("third-secret-key"), false);
     assert.equal(serializedHistory.includes("strong-password"), false);
 
     const logoutResponse = await fetch(`http://127.0.0.1:${panelPort}/api/session/logout`, {

@@ -589,6 +589,7 @@ export function createApiRouter({
     ["GET /api/session/status", credentialsController.status],
     ["POST /api/session/connect", credentialsController.connect],
     ["POST /api/session/logout", credentialsController.logout],
+    ["POST /api/session/cloudflare-accounts", credentialsController.createCloudflareAccount],
     [
       "POST /api/session/cloudflare-accounts/:accountId/select",
       credentialsController.switchCloudflareAccount,

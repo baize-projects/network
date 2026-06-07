@@ -1,5 +1,6 @@
 import {
   ApiUnavailableError,
+  createCloudflareAccount,
   createSetupAdmin,
   createSetupCloudflareAccounts,
   fetchSetupSecret,
@@ -42,6 +43,44 @@ function readSetupLoginForm() {
     password: String(formData.get("password") || ""),
     user: String(formData.get("user") || "").trim(),
   };
+}
+
+function readCloudflareAccountForm() {
+  const form = document.querySelector("#cloudflare-account-create-form");
+
+  if (!form) {
+    return { cfApiKey: "", cfEmail: "", cloudflareName: "" };
+  }
+
+  const formData = new FormData(form);
+
+  return {
+    cfApiKey: String(formData.get("cfApiKey") || "").trim(),
+    cfEmail: String(formData.get("cfEmail") || "").trim(),
+    cloudflareName: String(formData.get("cloudflareName") || "").trim(),
+  };
+}
+
+function restoreCloudflareAccountForm(account = {}) {
+  const form = document.querySelector("#cloudflare-account-create-form");
+
+  if (!form) {
+    return;
+  }
+
+  const values = {
+    cfApiKey: account.cfApiKey || "",
+    cfEmail: account.cfEmail || "",
+    cloudflareName: account.cloudflareName || "",
+  };
+
+  for (const [name, value] of Object.entries(values)) {
+    const field = form.querySelector(`[name="${name}"]`);
+
+    if (field) {
+      field.value = value;
+    }
+  }
 }
 
 function readAdminSetupForm() {
@@ -462,6 +501,62 @@ export function createSessionActions({ loadZones, renderApp }) {
     }
   }
 
+  function openCloudflareAccountDialog() {
+    state.cloudflareAccountDialogOpen = true;
+    state.cloudflareAccountError = "";
+    renderApp();
+  }
+
+  function closeCloudflareAccountDialog() {
+    if (state.cloudflareAccountSaving) {
+      return;
+    }
+
+    state.cloudflareAccountDialogOpen = false;
+    state.cloudflareAccountError = "";
+    renderApp();
+  }
+
+  async function submitCloudflareAccount(event) {
+    event?.preventDefault();
+
+    const account = readCloudflareAccountForm();
+
+    if (!account.cfEmail || !account.cfApiKey) {
+      state.cloudflareAccountError = "请输入 Cloudflare 登录邮箱和 Global API Key。";
+      renderApp();
+      restoreCloudflareAccountForm(account);
+      return;
+    }
+
+    state.cloudflareAccountSaving = true;
+    state.cloudflareAccountError = "";
+    renderApp();
+    restoreCloudflareAccountForm(account);
+
+    try {
+      const session = await createCloudflareAccount(account);
+
+      applySession(session);
+      state.cloudflareAccountDialogOpen = false;
+      state.cloudflareAccountError = "";
+      state.connected = true;
+      resetCloudflareAccountData();
+      await loadZones({ throwOnError: false });
+    } catch (error) {
+      state.cloudflareAccountError = error.message;
+      renderApp();
+      restoreCloudflareAccountForm(account);
+    } finally {
+      state.cloudflareAccountSaving = false;
+      renderApp();
+
+      if (state.cloudflareAccountDialogOpen && state.cloudflareAccountError) {
+        restoreCloudflareAccountForm(account);
+      }
+    }
+  }
+
   async function logoutSession() {
     try {
       await logoutCloudflareAccount();
@@ -478,12 +573,15 @@ export function createSessionActions({ loadZones, renderApp }) {
     changeCloudflareAccount,
     checkSession,
     addSetupCloudflareAccount,
+    closeCloudflareAccountDialog,
     completeCloudflareSetup,
     completeSetup,
     connectSession,
     logoutSession,
+    openCloudflareAccountDialog,
     removeSetupCloudflareAccount,
     recoverSetupSession,
     refreshSetupSecret,
+    submitCloudflareAccount,
   };
 }

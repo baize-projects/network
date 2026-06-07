@@ -25,6 +25,15 @@ export function bindEvents(actions) {
   document
     .querySelector("#cloudflare-account-switch")
     ?.addEventListener("change", actions.changeCloudflareAccount);
+  document
+    .querySelector("#cloudflare-account-open")
+    ?.addEventListener("click", actions.openCloudflareAccountDialog);
+  document
+    .querySelector("#cloudflare-account-create-form")
+    ?.addEventListener("submit", actions.submitCloudflareAccount);
+  document
+    .querySelectorAll(".cloudflare-account-dialog-close")
+    .forEach((button) => button.addEventListener("click", actions.closeCloudflareAccountDialog));
   document.querySelector("#logout-session")?.addEventListener("click", actions.logoutSession);
   document.querySelector("#add-domain-form")?.addEventListener("submit", actions.addDomain);
   document.querySelector("#back-to-domains")?.addEventListener("click", actions.backToDomains);

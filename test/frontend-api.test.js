@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { parseDnsBulkText } from "../public/js/actions/dns-actions.js";
 import { createSessionActions } from "../public/js/actions/session-actions.js";
 import { renderConnectView } from "../public/js/views/connect-view.js";
+import { renderShell } from "../public/js/views/shell-view.js";
 import {
   ApiUnavailableError,
   fetchSessionStatus,
@@ -215,6 +216,45 @@ test("setup Cloudflare step renders admin session recovery before saving account
   }
 });
 
+test("shell renders compact Cloudflare account add dialog", () => {
+  const previousDocument = global.document;
+  const app = { className: "", innerHTML: "" };
+  global.document = {
+    querySelector(selector) {
+      assert.equal(selector, "#app");
+      return app;
+    },
+  };
+
+  try {
+    state.cloudflareAccounts = [
+      { active: true, email: "fi***@example.com", id: "cf1", name: "主账号" },
+    ];
+    state.cloudflareAccountDialogOpen = true;
+    state.cloudflareAccountError = "该 Cloudflare 登录邮箱已存在。";
+    state.cloudflareAccountSaving = false;
+    state.activeCloudflareAccount = {
+      email: "fi***@example.com",
+      id: "cf1",
+      name: "主账号",
+    };
+    state.activeCloudflareAccountId = "cf1";
+    state.connected = true;
+    state.mainSection = "domain";
+    state.view = "domains";
+
+    renderShell("<section>content</section>");
+
+    assert.match(app.innerHTML, /id="cloudflare-account-open"/);
+    assert.match(app.innerHTML, /添加 Cloudflare 账号/);
+    assert.match(app.innerHTML, /id="cloudflare-account-create-form"/);
+    assert.match(app.innerHTML, /该 Cloudflare 登录邮箱已存在。/);
+    assert.doesNotMatch(app.innerHTML, /secret-key/);
+  } finally {
+    global.document = previousDocument;
+  }
+});
+
 test("refreshing setup secret keeps admin setup form values after rerender", async () => {
   const previousDocument = global.document;
   const previousFetch = global.fetch;
@@ -292,6 +332,118 @@ test("refreshing setup secret keeps admin setup form values after rerender", asy
     global.document = previousDocument;
     global.fetch = previousFetch;
     global.FormData = previousFormData;
+  }
+});
+
+test("logged-in users can add a Cloudflare account from the topbar dialog", async () => {
+  const previousDocument = global.document;
+  const previousFetch = global.fetch;
+  const previousFormData = global.FormData;
+  const previousHistory = global.history;
+  const requested = [];
+  const fields = {
+    cfApiKey: { value: "new-secret-key" },
+    cfEmail: { value: "new@example.com" },
+    cloudflareName: { value: "新增账号" },
+  };
+  const form = {
+    querySelector(selector) {
+      const match = String(selector).match(/^\[name="(?<name>[^"]+)"\]$/);
+
+      return match ? fields[match.groups.name] || null : null;
+    },
+  };
+  let loadZonesCalled = 0;
+  let renderCount = 0;
+
+  global.document = {
+    querySelector(selector) {
+      assert.equal(selector, "#cloudflare-account-create-form");
+      return form;
+    },
+  };
+  global.FormData = class TestFormData {
+    get(name) {
+      return fields[name]?.value || "";
+    }
+  };
+  global.fetch = async (url, options = {}) => {
+    requested.push([String(url), options.method || "GET", options.body || ""]);
+
+    return new Response(
+      JSON.stringify({
+        accounts: [
+          { active: false, email: "fi***@example.com", id: "cf1", name: "主账号" },
+          { active: true, email: "ne*@example.com", id: "cf2", name: "新增账号" },
+        ],
+        activeCloudflareAccount: {
+          email: "ne*@example.com",
+          id: "cf2",
+          name: "新增账号",
+        },
+        authenticated: true,
+        email: "ne*@example.com",
+        expiresAt: "2026-06-07T00:00:00.000Z",
+        hasCredentials: true,
+        loginRequired: true,
+        source: "cookie",
+      }),
+      {
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+        status: 201,
+      }
+    );
+  };
+  global.history = {
+    replaceState() {},
+  };
+
+  const actions = createSessionActions({
+    async loadZones() {
+      loadZonesCalled += 1;
+      state.zones = [{ id: "new-zone" }];
+    },
+    renderApp() {
+      renderCount += 1;
+    },
+  });
+
+  try {
+    state.cloudflareAccountDialogOpen = true;
+    state.cloudflareAccountError = "";
+    state.cloudflareAccountSaving = false;
+    state.connected = true;
+    state.mainSection = "workers";
+    state.zones = [{ id: "old-zone" }];
+    state.dnsRecords = [{ id: "old-record" }];
+
+    await actions.submitCloudflareAccount({ preventDefault() {} });
+
+    assert.deepEqual(requested, [
+      [
+        "/api/session/cloudflare-accounts",
+        "POST",
+        JSON.stringify({
+          cfApiKey: "new-secret-key",
+          cfEmail: "new@example.com",
+          cloudflareName: "新增账号",
+        }),
+      ],
+    ]);
+    assert.equal(loadZonesCalled, 1);
+    assert.equal(state.cloudflareAccountDialogOpen, false);
+    assert.equal(state.cloudflareAccountSaving, false);
+    assert.equal(state.activeCloudflareAccountId, "cf2");
+    assert.equal(state.sessionEmail, "ne*@example.com");
+    assert.deepEqual(state.dnsRecords, []);
+    assert.deepEqual(state.zones, [{ id: "new-zone" }]);
+    assert.equal(state.mainSection, "domain");
+    assert.equal(renderCount >= 2, true);
+  } finally {
+    global.document = previousDocument;
+    global.fetch = previousFetch;
+    global.FormData = previousFormData;
+    global.history = previousHistory;
   }
 });
 

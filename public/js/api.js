@@ -119,6 +119,16 @@ export async function createSetupCloudflareAccounts(payload) {
   return readJson(response, "Cloudflare 账号初始化失败");
 }
 
+export async function createCloudflareAccount(payload) {
+  const response = await apiFetch("/api/session/cloudflare-accounts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  return readJson(response, "Cloudflare 账号添加失败");
+}
+
 export async function loginPanel(credentials) {
   const response = await apiFetch("/api/session/connect", {
     method: "POST",

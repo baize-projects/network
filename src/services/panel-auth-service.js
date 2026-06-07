@@ -165,7 +165,7 @@ function validatePanelUserSetupInput({
   };
 }
 
-function validateCloudflareAccountsSetupInput(accounts = []) {
+function validateCloudflareAccountsSetupInput(accounts = [], { maxAccounts = 10 } = {}) {
   const normalizedAccounts = (Array.isArray(accounts) ? accounts : [])
     .map(normalizeCloudflareAccount)
     .filter((account) => account.email || account.globalApiKey);
@@ -177,9 +177,12 @@ function validateCloudflareAccountsSetupInput(accounts = []) {
     };
   }
 
-  if (normalizedAccounts.length > 10) {
+  if (normalizedAccounts.length > maxAccounts) {
     return {
-      error: "首次初始化最多一次添加 10 个 Cloudflare 账号。",
+      error:
+        maxAccounts === 1
+          ? "每次只能添加一个 Cloudflare 账号。"
+          : "首次初始化最多一次添加 10 个 Cloudflare 账号。",
       statusCode: 400,
     };
   }
@@ -395,6 +398,55 @@ export class PanelAuthService {
 
         return {
           accounts: this.store.createCloudflareAccounts(validation.normalizedAccounts),
+          statusCode: 201,
+        };
+      });
+    } catch (error) {
+      return {
+        error: error.message || "Cloudflare 账号保存失败，请稍后重试。",
+        statusCode: 500,
+      };
+    }
+  }
+
+  createCloudflareAccount({ cloudflareName = "", cfApiKey = "", cfEmail = "" } = {}) {
+    const setupState = this.getSetupState();
+    const validation = validateCloudflareAccountsSetupInput(
+      [{ cfApiKey, cfEmail, cloudflareName }],
+      { maxAccounts: 1 }
+    );
+
+    if (setupState.panelUserRequired) {
+      return {
+        error: "请先创建管理员账户并绑定 2FA。",
+        statusCode: 412,
+      };
+    }
+
+    if (validation.error) {
+      return validation;
+    }
+
+    const account = validation.normalizedAccounts[0];
+
+    if (this.store.hasCloudflareAccountEmail(account.email)) {
+      return {
+        error: "该 Cloudflare 登录邮箱已存在。",
+        statusCode: 409,
+      };
+    }
+
+    try {
+      return this.store.runSetupTransaction(() => {
+        if (this.store.hasCloudflareAccountEmail(account.email)) {
+          return {
+            error: "该 Cloudflare 登录邮箱已存在。",
+            statusCode: 409,
+          };
+        }
+
+        return {
+          account: this.store.createCloudflareAccount(account),
           statusCode: 201,
         };
       });

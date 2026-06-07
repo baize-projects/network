@@ -124,6 +124,25 @@ export class SqliteStore {
     return Boolean(row?.exists_flag);
   }
 
+  hasCloudflareAccountEmail(email = "") {
+    const normalizedEmail = normalizeString(email).toLowerCase();
+
+    if (!normalizedEmail) {
+      return false;
+    }
+
+    const row = this.database
+      .prepare(
+        `SELECT 1 AS exists_flag
+         FROM cloudflare_accounts
+         WHERE lower(email) = ?
+         LIMIT 1`
+      )
+      .get(normalizedEmail);
+
+    return Boolean(row?.exists_flag);
+  }
+
   listCloudflareAccounts() {
     return this.database
       .prepare(
@@ -160,7 +179,7 @@ export class SqliteStore {
 
   createCloudflareAccount({ email, globalApiKey, name = "" }) {
     const createdAt = nowIso();
-    const normalizedEmail = normalizeString(email);
+    const normalizedEmail = normalizeString(email).toLowerCase();
     const normalizedName = normalizeString(name) || normalizedEmail;
     const id = `cf_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 

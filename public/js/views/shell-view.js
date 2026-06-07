@@ -78,6 +78,57 @@ function renderAccountSelector() {
   `;
 }
 
+function renderCloudflareAccountDialog() {
+  if (!state.cloudflareAccountDialogOpen) {
+    return "";
+  }
+
+  return `
+    <div class="account-dialog-backdrop" role="presentation">
+      <section class="account-dialog" role="dialog" aria-modal="true" aria-labelledby="account-dialog-title">
+        <div class="account-dialog-head">
+          <div>
+            <h2 id="account-dialog-title">添加 Cloudflare 账号</h2>
+            <p>新增账号会写入服务端 SQLite，保存成功后自动切换到该账号。</p>
+          </div>
+          <button class="icon-button cloudflare-account-dialog-close" type="button" title="关闭" aria-label="关闭" ${state.cloudflareAccountSaving ? "disabled" : ""}>
+            ${icon("x")}
+          </button>
+        </div>
+
+        <form class="account-dialog-form" id="cloudflare-account-create-form">
+          <label class="account-dialog-field">
+            <span>账号名称</span>
+            <input name="cloudflareName" type="text" autocomplete="off" placeholder="备用账号" ${state.cloudflareAccountSaving ? "disabled" : ""} />
+          </label>
+          <label class="account-dialog-field">
+            <span>Cloudflare 登录邮箱</span>
+            <input name="cfEmail" type="email" autocomplete="email" placeholder="name@example.com" ${state.cloudflareAccountSaving ? "disabled" : ""} />
+          </label>
+          <label class="account-dialog-field">
+            <span>Cloudflare Global API Key</span>
+            <input name="cfApiKey" type="password" autocomplete="off" placeholder="仅写入服务端 SQLite" ${state.cloudflareAccountSaving ? "disabled" : ""} />
+          </label>
+
+          <div class="account-dialog-security">
+            <strong>安全保存方式</strong>
+            <span>接口响应、Cookie、localStorage 和操作历史都不会保存 Global API Key。</span>
+          </div>
+
+          ${state.cloudflareAccountError ? `<div class="notice error-notice">${escapeHtml(state.cloudflareAccountError)}</div>` : ""}
+
+          <div class="account-dialog-actions">
+            <button class="ghost-button cloudflare-account-dialog-close" type="button" ${state.cloudflareAccountSaving ? "disabled" : ""}>取消</button>
+            <button class="primary-button" type="submit" ${state.cloudflareAccountSaving ? "disabled" : ""}>
+              ${state.cloudflareAccountSaving ? "保存中..." : "保存并切换"}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+}
+
 export function renderShell(content) {
   const app = document.querySelector("#app");
   const accountLabel = state.activeCloudflareAccount?.email || state.sessionEmail || "Cloudflare Panel";
@@ -107,11 +158,17 @@ export function renderShell(content) {
           <h1>${escapeHtml(topbarTitle(state.view, state.zoneSection, state.mainSection))}</h1>
         </div>
         <div class="topbar-actions">
-          ${renderAccountSelector()}
+          <div class="account-tools">
+            ${renderAccountSelector()}
+            <button class="account-add-button" id="cloudflare-account-open" type="button" title="添加 Cloudflare 账号" aria-label="添加 Cloudflare 账号">
+              ${icon("plus")}
+            </button>
+          </div>
           <button class="logout" type="button" id="logout-session">退出</button>
         </div>
       </header>
       ${content}
+      ${renderCloudflareAccountDialog()}
     </main>
   `;
 }

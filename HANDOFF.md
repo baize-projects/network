@@ -3385,3 +3385,41 @@ node --test test/smoke.test.js
   - 第一步创建管理员后直接进入第二步，没有出现恢复会话表单，保存按钮可点击。
   - 第二步保存演示 Cloudflare 账号后进入面板，并通过本地 mock Cloudflare API 加载到 `example.com` 域名列表。
   - 验证过程没有连接真实 Cloudflare API，也没有使用真实账号或 Global API Key。
+
+## 2026-06-08 登录后添加 Cloudflare 账号
+
+用户要求：面板登录完成后，也能继续添加新的 Cloudflare 账号，用于多账户管理。
+
+本次变更：
+
+- 后端新增 `POST /api/session/cloudflare-accounts`：
+  - 仅允许已登录管理员会话调用；
+  - 继续沿用路由层 CSRF 校验；
+  - 每次只添加一个 Cloudflare 账号；
+  - Cloudflare 登录邮箱大小写不敏感去重；
+  - 保存成功后自动把当前会话切换到新账号。
+- SQLite 存储层新增 Cloudflare 邮箱存在性检查，并统一把账号邮箱小写化后入库。
+- 前端顶部账号切换器旁新增 `+` 按钮：
+  - 点击后打开紧凑弹窗；
+  - 输入账号名称、Cloudflare 登录邮箱和 Global API Key；
+  - 保存成功后自动关闭弹窗、切换新账号并刷新域名列表。
+- 安全边界：
+  - Global API Key 只写入服务端 SQLite 加密字段；
+  - 接口响应不返回 Global API Key；
+  - Cookie、localStorage、前端全局状态不会持久化 Global API Key；
+  - `/api/session/*` 仍不写入操作历史，避免账号密钥进入历史记录。
+
+验证：
+
+- `node --check src/controllers/credentials-controller.js src/routes/api-routes.js src/services/panel-auth-service.js src/services/sqlite-store.js public/js/actions/session-actions.js public/js/api.js public/js/events.js public/js/state.js public/js/views/shell-view.js`
+- `node --test test/frontend-api.test.js test/smoke.test.js`
+- `node --test test/*.test.js`：61 个测试全部通过。
+- `git diff --check`：无空白错误。
+- 敏感信息扫描未命中真实 Cloudflare Key、真实邮箱或会话 Cookie。
+- 页面级验证：
+  - 使用独立临时数据目录和本地 mock Cloudflare API；
+  - 通过浏览器登录演示管理员；
+  - 点击顶部账号切换器旁 `+`，填写演示 Cloudflare 账号；
+  - 保存后弹窗自动关闭，账号切换为“浏览器新增账号”；
+  - 域名列表从 `first.example` 切换到 `third.example`；
+  - 页面文本未出现演示 Global API Key。

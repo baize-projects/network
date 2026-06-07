@@ -266,6 +266,54 @@ export class CredentialsController {
     };
   };
 
+  createCloudflareAccount = async ({ request }) => {
+    const sessionCredentials = this.credentialSessionService.getCredentials(request);
+
+    if (!sessionCredentials?.authenticated) {
+      return {
+        statusCode: 401,
+        body: { error: "请先登录面板。" },
+      };
+    }
+
+    const body = await readJsonBody(request);
+    const result = this.panelAuthService.createCloudflareAccount({
+      cfApiKey: body.cfApiKey || body.globalApiKey || "",
+      cfEmail: body.cfEmail || body.email || "",
+      cloudflareName: body.cloudflareName || body.cfName || body.name || "",
+    });
+
+    if (result.error) {
+      return {
+        statusCode: result.statusCode || 400,
+        body: { error: result.error },
+      };
+    }
+
+    const selectedAccountId = result.account?.id || "";
+    const session = this.credentialSessionService.update(request, {
+      activeCloudflareAccountId: selectedAccountId,
+      authenticated: true,
+    });
+    const activeCloudflareAccount = this.cloudflareAccountService.getSafeAccount(selectedAccountId);
+
+    return {
+      statusCode: result.statusCode || 201,
+      body: {
+        accounts: this.cloudflareAccountService.listSafe(selectedAccountId),
+        activeCloudflareAccount,
+        authenticated: true,
+        csrfToken: session?.csrfToken || sessionCredentials.csrfToken || "",
+        email: activeCloudflareAccount?.email || "",
+        expiresAt: session?.expiresAt || sessionCredentials.expiresAt || "",
+        hasCredentials: true,
+        loginRequired: true,
+        setupRequired: false,
+        source: "cookie",
+      },
+    };
+  };
+
   connect = async ({ request }) => {
     const body = await readJsonBody(request);
     const user = String(body.user || body.username || "").trim();

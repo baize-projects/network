@@ -32,6 +32,9 @@ export const state = {
     { cloudflareName: "第三账号", cfEmail: "", cfApiKey: "" },
   ],
   cloudflareAccounts: [],
+  cloudflareAccountDialogOpen: false,
+  cloudflareAccountSaving: false,
+  cloudflareAccountError: "",
   activeCloudflareAccount: null,
   activeCloudflareAccountId: "",
   mainSection: "domain",
@@ -207,6 +210,9 @@ export function resetSessionState() {
     { cloudflareName: "第三账号", cfEmail: "", cfApiKey: "" },
   ];
   state.cloudflareAccounts = [];
+  state.cloudflareAccountDialogOpen = false;
+  state.cloudflareAccountSaving = false;
+  state.cloudflareAccountError = "";
   state.activeCloudflareAccount = null;
   state.activeCloudflareAccountId = "";
   state.selectingCloudflareAccount = false;
