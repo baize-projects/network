@@ -95,6 +95,7 @@ export function createContainer(config) {
     dnsRecordsService,
   });
   const credentialSessionService = new CredentialSessionService({
+    publicOrigin: config.server.publicOrigin,
     secureCookies: config.server.secureCookies,
     trustProxyHeaders: config.server.trustProxyHeaders,
     ttlDays: config.session.ttlDays,

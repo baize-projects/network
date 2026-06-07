@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import { parseDnsBulkText } from "../public/js/actions/dns-actions.js";
 import { createSessionActions } from "../public/js/actions/session-actions.js";
+import { renderConnectView } from "../public/js/views/connect-view.js";
 import {
   ApiUnavailableError,
   fetchSessionStatus,
@@ -169,6 +170,123 @@ test("manual login still tells static HTML users that the Node backend is missin
 
     assert.equal(state.connected, false);
     assert.match(state.sessionError, /Node\.js 后端/);
+    assert.equal(renderCount, 2);
+  } finally {
+    global.document = previousDocument;
+    global.fetch = previousFetch;
+    global.FormData = previousFormData;
+  }
+});
+
+test("setup Cloudflare step renders admin session recovery before saving accounts", () => {
+  const previousDocument = global.document;
+  const app = { className: "", innerHTML: "" };
+  global.document = {
+    querySelector(selector) {
+      assert.equal(selector, "#app");
+      return app;
+    },
+  };
+
+  try {
+    state.checkingSession = false;
+    state.sessionAuthenticated = false;
+    state.sessionError = "";
+    state.setupCloudflareAccounts = [
+      { cloudflareName: "主账号", cfEmail: "", cfApiKey: "" },
+    ];
+    state.setupLoginSubmitting = false;
+    state.setupRequired = true;
+    state.setupStep = "cloudflare";
+    state.setupSubmitting = false;
+
+    renderConnectView();
+
+    assert.match(app.innerHTML, /恢复管理员会话/);
+    assert.match(app.innerHTML, /请先恢复管理员会话/);
+
+    state.sessionAuthenticated = true;
+    renderConnectView();
+
+    assert.doesNotMatch(app.innerHTML, /恢复管理员会话/);
+    assert.match(app.innerHTML, /保存 Cloudflare 账号并进入面板/);
+  } finally {
+    global.document = previousDocument;
+  }
+});
+
+test("refreshing setup secret keeps admin setup form values after rerender", async () => {
+  const previousDocument = global.document;
+  const previousFetch = global.fetch;
+  const previousFormData = global.FormData;
+  const fields = {
+    confirmPassword: { value: "strong-password" },
+    password: { value: "strong-password" },
+    setupToken: { value: "setup-token" },
+    username: { value: "operator" },
+  };
+  const form = {
+    querySelector(selector) {
+      const match = String(selector).match(/^\[name="(?<name>[^"]+)"\]$/);
+
+      return match ? fields[match.groups.name] || null : null;
+    },
+  };
+  let renderCount = 0;
+
+  global.document = {
+    querySelector(selector) {
+      assert.equal(selector, "#panel-setup-form");
+      return form;
+    },
+  };
+  global.FormData = class TestFormData {
+    get(name) {
+      return fields[name]?.value || "";
+    }
+  };
+  global.fetch = async (url, options = {}) => {
+    assert.equal(String(url), "/api/setup/secret");
+    assert.equal(options.method, "POST");
+
+    return new Response(
+      JSON.stringify({
+        otpauthUrl: "otpauth://totp/test",
+        secret: "ABCD EFGH IJKL MNOP",
+      }),
+      {
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+        status: 200,
+      }
+    );
+  };
+
+  const actions = createSessionActions({
+    async loadZones() {
+      throw new Error("loadZones should not run");
+    },
+    renderApp() {
+      renderCount += 1;
+
+      for (const field of Object.values(fields)) {
+        field.value = "";
+      }
+    },
+  });
+
+  try {
+    state.setupRequired = true;
+    state.setupStep = "admin";
+    state.setupSecret = "";
+    state.setupToken = "";
+
+    await actions.refreshSetupSecret();
+
+    assert.equal(fields.setupToken.value, "setup-token");
+    assert.equal(fields.username.value, "operator");
+    assert.equal(fields.password.value, "strong-password");
+    assert.equal(fields.confirmPassword.value, "strong-password");
+    assert.equal(state.setupSecret, "ABCD EFGH IJKL MNOP");
     assert.equal(renderCount, 2);
   } finally {
     global.document = previousDocument;

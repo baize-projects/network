@@ -9,6 +9,9 @@ export function bindEvents(actions) {
     .querySelector("#cloudflare-accounts-setup-form")
     ?.addEventListener("submit", actions.completeCloudflareSetup);
   document
+    .querySelector("#setup-session-login-form")
+    ?.addEventListener("submit", actions.recoverSetupSession);
+  document
     .querySelector("#setup-secret-refresh")
     ?.addEventListener("click", actions.refreshSetupSecret);
   document

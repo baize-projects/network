@@ -28,6 +28,22 @@ function readConnectForm() {
   };
 }
 
+function readSetupLoginForm() {
+  const form = document.querySelector("#setup-session-login-form");
+
+  if (!form) {
+    return { auth: "", password: "", user: "" };
+  }
+
+  const formData = new FormData(form);
+
+  return {
+    auth: String(formData.get("auth") || "").trim(),
+    password: String(formData.get("password") || ""),
+    user: String(formData.get("user") || "").trim(),
+  };
+}
+
 function readAdminSetupForm() {
   const form = document.querySelector("#panel-setup-form");
 
@@ -55,6 +71,29 @@ function readAdminSetupForm() {
     totpSecret: String(formData.get("totpSecret") || state.setupSecret || "").trim(),
     username: String(formData.get("username") || "").trim(),
   };
+}
+
+function restoreAdminSetupForm(setup = {}) {
+  const form = document.querySelector("#panel-setup-form");
+
+  if (!form) {
+    return;
+  }
+
+  const values = {
+    confirmPassword: setup.confirmPassword || "",
+    password: setup.password || "",
+    setupToken: setup.setupToken || state.setupToken || "",
+    username: setup.username || "",
+  };
+
+  for (const [name, value] of Object.entries(values)) {
+    const field = form.querySelector(`[name="${name}"]`);
+
+    if (field) {
+      field.value = value;
+    }
+  }
 }
 
 function readCloudflareAccountsForm() {
@@ -111,7 +150,7 @@ async function ensureSetupSecret({ force = false } = {}) {
   renderAppRef?.();
 
   try {
-      const secret = await fetchSetupSecret(state.setupToken);
+    const secret = await fetchSetupSecret(state.setupToken);
     state.setupSecret = secret.secret || "";
     state.setupOtpAuthUrl = secret.otpauthUrl || "";
   } catch (error) {
@@ -207,6 +246,7 @@ export function createSessionActions({ loadZones, renderApp }) {
     state.setupSecret = "";
     state.setupOtpAuthUrl = "";
     await ensureSetupSecret({ force: true });
+    restoreAdminSetupForm(setup);
   }
 
   async function completeSetup(event) {
@@ -244,7 +284,7 @@ export function createSessionActions({ loadZones, renderApp }) {
     renderApp();
 
     try {
-      const session = await createSetupAdmin({
+      await createSetupAdmin({
         password: setup.password,
         setupToken: setup.setupToken,
         totpCode: setup.totpCode,
@@ -252,11 +292,17 @@ export function createSessionActions({ loadZones, renderApp }) {
         username: setup.username,
       });
 
-      if (!session.authenticated) {
-        throw new Error("浏览器未能保存登录 Cookie，请允许本站 Cookie 后重新初始化。");
+      const persistedSession = await fetchSessionStatus();
+
+      applySession(persistedSession);
+      if (!persistedSession.authenticated) {
+        state.setupRequired = true;
+        state.setupStep = "cloudflare";
+        state.setupSecret = "";
+        state.setupOtpAuthUrl = "";
+        throw new Error("管理员已创建，但浏览器未能保存登录 Cookie，请在第二步恢复管理员会话。");
       }
 
-      applySession(session);
       state.setupRequired = true;
       state.setupStep = "cloudflare";
       state.setupSecret = "";
@@ -293,6 +339,12 @@ export function createSessionActions({ loadZones, renderApp }) {
       return;
     }
 
+    if (!state.sessionAuthenticated) {
+      state.sessionError = "请先恢复管理员会话后再保存 Cloudflare 账号。";
+      renderApp();
+      return;
+    }
+
     state.setupSubmitting = true;
     state.sessionError = "";
     renderApp();
@@ -312,6 +364,43 @@ export function createSessionActions({ loadZones, renderApp }) {
       state.sessionError = error.message;
     } finally {
       state.setupSubmitting = false;
+      renderApp();
+    }
+  }
+
+  async function recoverSetupSession(event) {
+    event?.preventDefault();
+
+    const credentials = readSetupLoginForm();
+
+    if (!credentials.user || !credentials.password || !credentials.auth) {
+      state.sessionError = "请输入管理员用户名、密码和 2FA 验证码。";
+      renderApp();
+      return;
+    }
+
+    state.setupLoginSubmitting = true;
+    state.sessionError = "";
+    renderApp();
+
+    try {
+      await loginPanel(credentials);
+      const session = await fetchSessionStatus();
+
+      if (!session.authenticated) {
+        throw new Error("浏览器未能保存登录 Cookie，请确认使用当前访问地址并允许本站 Cookie。");
+      }
+
+      applySession(session);
+      state.connected = false;
+      state.setupRequired = true;
+      state.setupStep = "cloudflare";
+    } catch (error) {
+      state.connected = false;
+      state.zoneError = "";
+      state.sessionError = error.message;
+    } finally {
+      state.setupLoginSubmitting = false;
       renderApp();
     }
   }
@@ -394,6 +483,7 @@ export function createSessionActions({ loadZones, renderApp }) {
     connectSession,
     logoutSession,
     removeSetupCloudflareAccount,
+    recoverSetupSession,
     refreshSetupSecret,
   };
 }

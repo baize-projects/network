@@ -281,6 +281,7 @@ test("lists all Cloudflare zones through paginated API responses", async () => {
 test("requires first-run setup before Cloudflare APIs are available", async () => {
   const panelPort = 3211;
   const panel = startPanel({
+    NODE_ENV: "production",
     PORT: String(panelPort),
     CLOUDFLARE_EMAIL: "",
     CLOUDFLARE_GLOBAL_API_KEY: "",
@@ -454,6 +455,49 @@ test("initializes admin first and then saves multiple Cloudflare accounts", asyn
     assert.equal(adminPayload.setupState.panelUserRequired, false);
     assert.equal(adminPayload.setupState.cloudflareAccountRequired, true);
     assert.match(sessionCookie, /cf_panel_session=/);
+    assert.doesNotMatch(adminResponse.headers.get("set-cookie") || "", /;\s*Secure\b/i);
+
+    const missingCookieAccountsResponse = await fetch(
+      `http://127.0.0.1:${panelPort}/api/setup/cloudflare-accounts`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accounts: [
+            {
+              cfApiKey: "first-secret-key",
+              cfEmail: "first@example.com",
+              cloudflareName: "主账号",
+            },
+          ],
+        }),
+      }
+    );
+    const missingCookieAccountsPayload = await missingCookieAccountsResponse.json();
+
+    assert.equal(missingCookieAccountsResponse.status, 401);
+    assert.match(missingCookieAccountsPayload.error, /请先创建管理员账户并登录/);
+
+    const recoveryResponse = await fetch(`http://127.0.0.1:${panelPort}/api/session/connect`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        auth: makeTotp(secretPayload.secret),
+        password: "strong-password",
+        user: "operator",
+      }),
+    });
+    const recoveryPayload = await recoveryResponse.json();
+    const recoveryCookie = recoveryResponse.headers.get("set-cookie")?.split(";")[0] || "";
+
+    assert.equal(recoveryResponse.status, 200);
+    assert.equal(recoveryPayload.authenticated, true);
+    assert.equal(recoveryPayload.setupRequired, true);
+    assert.equal(recoveryPayload.hasCredentials, false);
+    assert.equal(recoveryPayload.setupState.panelUserRequired, false);
+    assert.equal(recoveryPayload.setupState.cloudflareAccountRequired, true);
+    assert.match(recoveryCookie, /cf_panel_session=/);
+    assert.doesNotMatch(recoveryResponse.headers.get("set-cookie") || "", /;\s*Secure\b/i);
 
     const accountsResponse = await fetch(
       `http://127.0.0.1:${panelPort}/api/setup/cloudflare-accounts`,
@@ -461,8 +505,8 @@ test("initializes admin first and then saves multiple Cloudflare accounts", asyn
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: sessionCookie,
-          "X-CSRF-Token": adminPayload.csrfToken,
+          Cookie: recoveryCookie,
+          "X-CSRF-Token": recoveryPayload.csrfToken,
         },
         body: JSON.stringify({
           accounts: [

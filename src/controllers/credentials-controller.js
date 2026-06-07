@@ -23,7 +23,7 @@ export class CredentialsController {
     const setupState = this.panelAuthService.getSetupState();
     const panelLoginConfigured = this.panelAuthService.isConfigured();
     const hasCloudflareAccounts = this.cloudflareAccountService.hasAccounts();
-    const authenticated = setupState.setupRequired
+    const authenticated = setupState.panelUserRequired
       ? false
       : Boolean(sessionCredentials?.authenticated);
     const activeCloudflareAccountId = this.cloudflareAccountService.resolveSelectedAccountId(
@@ -272,8 +272,13 @@ export class CredentialsController {
     const password = String(body.password || "");
     const auth = String(body.auth || body.authCode || body.totp || "").trim();
     const activeCloudflareAccountId = String(body.cloudflareAccountId || "").trim();
+    const setupState = this.panelAuthService.getSetupState();
+    const cloudflareAccountSetupPending =
+      setupState.setupRequired &&
+      !setupState.panelUserRequired &&
+      setupState.cloudflareAccountRequired;
 
-    if (this.panelAuthService.getSetupState().setupRequired) {
+    if (setupState.setupRequired && !cloudflareAccountSetupPending) {
       return {
         statusCode: 412,
         body: {
@@ -308,6 +313,33 @@ export class CredentialsController {
 
     this.resetRateLimit(request, `login:${user}`);
     if (!this.cloudflareAccountService.hasAccounts()) {
+      if (cloudflareAccountSetupPending) {
+        const session = this.credentialSessionService.create({
+          authenticated: true,
+          source: "panel",
+        });
+
+        return {
+          statusCode: 200,
+          headers: {
+            "Set-Cookie": this.credentialSessionService.createCookie(request, session),
+          },
+          body: {
+            accounts: [],
+            activeCloudflareAccount: null,
+            authenticated: true,
+            csrfToken: session.csrfToken,
+            email: "",
+            expiresAt: session.expiresAt,
+            hasCredentials: false,
+            loginRequired: true,
+            setupRequired: true,
+            setupState: this.panelAuthService.getSetupState(),
+            source: "cookie",
+          },
+        };
+      }
+
       return {
         statusCode: 412,
         body: {

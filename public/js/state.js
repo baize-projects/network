@@ -20,6 +20,7 @@ export const state = {
   loginRequired: false,
   setupRequired: false,
   setupLoadingSecret: false,
+  setupLoginSubmitting: false,
   setupSubmitting: false,
   setupSecret: "",
   setupOtpAuthUrl: "",
@@ -194,6 +195,7 @@ export function resetSessionState() {
   state.loginRequired = false;
   state.setupRequired = false;
   state.setupLoadingSecret = false;
+  state.setupLoginSubmitting = false;
   state.setupSubmitting = false;
   state.setupSecret = "";
   state.setupOtpAuthUrl = "";

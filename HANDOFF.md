@@ -3346,3 +3346,42 @@ node --test test/smoke.test.js
 
 - 浏览器实际测量：访问域名输入框、优选域名输入框和“添加优选”按钮 top 坐标一致，`verticalDelta = 0`。
 - 使用本地静态演示页生成截图，不连接真实 Cloudflare API，不写入真实账号或 Global API Key。
+
+## 2026-06-07 首次初始化第二步 Cookie 修复
+
+用户反馈：Docker 部署后通过 `http://IP:端口` 打开面板，第一步创建管理员后，第二步添加 Cloudflare 账号提示“请先创建管理员账户并登录”。
+
+根因：
+
+- Docker 镜像设置 `NODE_ENV=production`，旧逻辑会让会话 Cookie 默认带 `Secure`。
+- 浏览器不会在普通 HTTP 地址保存 `Secure` Cookie，因此第一步虽然已经创建管理员，第二步请求却没有 `cf_panel_session`。
+- 已经卡在半初始化状态的用户还会遇到另一个问题：管理员已存在、Cloudflare 账号未配置时，旧登录接口直接返回初始化未完成，无法恢复会话。
+
+本次变更：
+
+- `SECURE_COOKIES` 改为显式开关，`NODE_ENV=production` 不再强制 Cookie 带 `Secure`。
+- 会话 Cookie 现在只在这些场景带 `Secure`：
+  - 显式设置 `SECURE_COOKIES=true`；
+  - `PUBLIC_ORIGIN` 是 HTTPS；
+  - 连接本身是 HTTPS；
+  - `TRUST_PROXY_HEADERS=true` 且可信反代传入 `X-Forwarded-Proto: https`。
+- `/api/session/status` 不再因为只缺 Cloudflare 账号而隐藏已认证管理员会话。
+- `/api/session/connect` 支持“管理员已创建但 Cloudflare 账号待添加”的半初始化恢复登录。
+- 第二步新增“恢复管理员会话”表单；如果浏览器没有保存 Cookie，用户可用管理员用户名、密码和 2FA 登录后继续保存 Cloudflare 账号。
+- 第一步创建管理员后，前端会立即调用 `/api/session/status` 验证浏览器是否真的保存 Cookie；未保存时给出明确恢复提示。
+- 生成 2FA 登录密钥时会触发页面重渲染，本次同步修复了初始化口令、用户名和两次密码被清空的问题。
+
+文档：
+
+- `README.md` 增加 HTTP 直连和旧版本卡第二步的恢复说明。
+- `DEPLOYMENT.md` 更新 HTTPS/Cookie 部署建议，明确 HTTP 直连默认可用，HTTPS 场景通过 `PUBLIC_ORIGIN` 或反代头启用 `Secure`。
+
+验证：
+
+- `node --test test/*.test.js`：58 个测试全部通过。
+- 浏览器实际验证：
+  - 用独立 `/tmp/cf-panel-cookie-check-mock` 数据目录启动生产模式临时面板。
+  - 通过 `http://127.0.0.1:3207/` 完整走首启流程。
+  - 第一步创建管理员后直接进入第二步，没有出现恢复会话表单，保存按钮可点击。
+  - 第二步保存演示 Cloudflare 账号后进入面板，并通过本地 mock Cloudflare API 加载到 `example.com` 域名列表。
+  - 验证过程没有连接真实 Cloudflare API，也没有使用真实账号或 Global API Key。

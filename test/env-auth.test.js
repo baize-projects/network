@@ -5,6 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { createConfig } from "../src/config/env.js";
+import { CredentialSessionService } from "../src/services/credential-session-service.js";
 import { PanelAuthService, generateTotpSecret } from "../src/services/panel-auth-service.js";
 import { PersistentSecretService } from "../src/services/persistent-secret-service.js";
 import { SetupGuardService } from "../src/services/setup-guard-service.js";
@@ -52,6 +53,7 @@ test("createConfig exposes explicit production hardening switches", () => {
     PANEL_SECRET_KEY: "x".repeat(32),
     PANEL_SECRET_KEY_FILE: "/run/secrets/cf-panel-key",
     PUBLIC_ORIGIN: "https://panel.example.com",
+    SECURE_COOKIES: "true",
     TRUST_PROXY_HEADERS: "true",
   });
 
@@ -60,7 +62,56 @@ test("createConfig exposes explicit production hardening switches", () => {
   assert.equal(config.features.d1SqlConsoleAllowMutations, true);
   assert.equal(config.features.d1SqlConsoleEnabled, true);
   assert.equal(config.server.publicOrigin, "https://panel.example.com");
+  assert.equal(config.server.secureCookies, true);
   assert.equal(config.server.trustProxyHeaders, true);
+});
+
+test("createConfig does not force Secure cookies for Docker HTTP access", () => {
+  assert.equal(
+    createConfig({
+      NODE_ENV: "production",
+      SECURE_COOKIES: "false",
+    }).server.secureCookies,
+    false
+  );
+  assert.equal(
+    createConfig({
+      NODE_ENV: "production",
+      SECURE_COOKIES: "true",
+    }).server.secureCookies,
+    true
+  );
+});
+
+test("CredentialSessionService only marks cookies Secure for HTTPS-capable access", () => {
+  const request = { headers: { host: "127.0.0.1:3000" }, socket: {} };
+  const httpService = new CredentialSessionService();
+  const httpSession = httpService.create({ authenticated: true });
+
+  assert.doesNotMatch(httpService.createCookie(request, httpSession), /;\s*Secure\b/i);
+
+  const publicOriginService = new CredentialSessionService({
+    publicOrigin: "https://panel.example.com",
+  });
+  const publicOriginSession = publicOriginService.create({ authenticated: true });
+
+  assert.match(publicOriginService.createCookie(request, publicOriginSession), /;\s*Secure\b/i);
+
+  const forwardedService = new CredentialSessionService({ trustProxyHeaders: true });
+  const forwardedSession = forwardedService.create({ authenticated: true });
+
+  assert.match(
+    forwardedService.createCookie(
+      { headers: { "x-forwarded-proto": "https" }, socket: {} },
+      forwardedSession
+    ),
+    /;\s*Secure\b/i
+  );
+
+  const forcedService = new CredentialSessionService({ secureCookies: true });
+  const forcedSession = forcedService.create({ authenticated: true });
+
+  assert.match(forcedService.createCookie(request, forcedSession), /;\s*Secure\b/i);
 });
 
 test("PersistentSecretService can read encryption material outside DATA_DIR", async () => {

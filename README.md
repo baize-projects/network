@@ -59,6 +59,8 @@ http://服务器IP:3000
 4. 在第 2 页录入一个或多个 Cloudflare 账号名称、登录邮箱和 Global API Key。
 5. 保存后进入管理面板，后续可在顶部切换当前 Cloudflare 账号。
 
+默认直接通过 `http://服务器IP:3000` 访问时，初始化会话 Cookie 不带 `Secure`，浏览器可以保存第 1 页后的管理员会话。如果旧版本卡在第 2 页并提示“请先创建管理员账户并登录”，新版会显示“恢复管理员会话”，用管理员账号、密码和 2FA 登录后即可继续添加 Cloudflare 账号。
+
 不再通过 `.env`、`USER/PASSWORD/AUTH`、`EMAILn/CF_APIn` 配置敏感信息。
 
 ## 可选环境变量

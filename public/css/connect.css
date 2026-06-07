@@ -108,6 +108,12 @@
   padding: 22px;
 }
 
+.setup-session-card {
+  margin-bottom: 16px;
+  border-color: #fed7aa;
+  background: #fffaf5;
+}
+
 .connect-card-title {
   display: flex;
   align-items: flex-start;
@@ -302,6 +308,28 @@
 
 .connect-security span {
   color: #15803d;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.connect-warning {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #9a3412;
+  padding: 10px 12px;
+}
+
+.connect-warning strong {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.connect-warning span {
+  color: #9a3412;
   font-size: 12px;
   line-height: 1.45;
 }

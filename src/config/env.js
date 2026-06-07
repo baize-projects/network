@@ -12,6 +12,20 @@ function parsePort(value, fallback) {
   return Number.isInteger(parsed) && parsed >= 0 && parsed <= 65535 ? parsed : fallback;
 }
 
+function parseBoolean(value, fallback = false) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+
+  return fallback;
+}
+
 export function createConfig(env = process.env) {
   const dataDir = env.DATA_DIR || join(projectRoot, "data");
 
@@ -25,8 +39,8 @@ export function createConfig(env = process.env) {
     server: {
       port: parsePort(env.PORT, 3000),
       publicOrigin: env.PUBLIC_ORIGIN || "",
-      secureCookies: env.NODE_ENV === "production" || env.SECURE_COOKIES === "true",
-      trustProxyHeaders: env.TRUST_PROXY_HEADERS === "true",
+      secureCookies: parseBoolean(env.SECURE_COOKIES, false),
+      trustProxyHeaders: parseBoolean(env.TRUST_PROXY_HEADERS, false),
     },
     cloudflare: {
       apiBaseUrl: env.CLOUDFLARE_API_BASE_URL || "https://api.cloudflare.com/client/v4",

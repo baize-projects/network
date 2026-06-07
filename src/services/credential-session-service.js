@@ -54,10 +54,19 @@ function isSessionId(value) {
   return /^[A-Za-z0-9_-]{32,128}$/.test(String(value || ""));
 }
 
+function isHttpsOrigin(value = "") {
+  try {
+    return new URL(String(value || "")).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export class CredentialSessionService {
   constructor({
     cookieName = defaultCookieName,
     now = () => Date.now(),
+    publicOrigin = "",
     secureCookies = false,
     ttlDays = defaultTtlDays,
     trustProxyHeaders = false,
@@ -66,6 +75,7 @@ export class CredentialSessionService {
     this.maxAgeDays = normalizeTtlDays(ttlDays);
     this.maxAgeSeconds = this.maxAgeDays * secondsPerDay;
     this.now = now;
+    this.publicOriginIsHttps = isHttpsOrigin(publicOrigin);
     this.secureCookies = Boolean(secureCookies);
     this.sessions = new Map();
     this.trustProxyHeaders = Boolean(trustProxyHeaders);
@@ -201,8 +211,12 @@ export class CredentialSessionService {
   }
 
   shouldUseSecureCookie(request) {
+    if (this.secureCookies || this.publicOriginIsHttps || request?.socket?.encrypted) {
+      return true;
+    }
+
     if (!this.trustProxyHeaders) {
-      return this.secureCookies;
+      return false;
     }
 
     const forwardedProto = String(request?.headers?.["x-forwarded-proto"] || "")
@@ -210,7 +224,7 @@ export class CredentialSessionService {
       .trim()
       .toLowerCase();
 
-    return this.secureCookies || forwardedProto === "https";
+    return forwardedProto === "https";
   }
 
   readSessionId(request) {

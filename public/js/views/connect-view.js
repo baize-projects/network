@@ -104,13 +104,59 @@ function renderAdminSetupBody() {
   `;
 }
 
+function renderSetupSessionRecovery() {
+  if (state.sessionAuthenticated) {
+    return "";
+  }
+
+  return `
+    <form class="connect-card setup-card setup-session-card" id="setup-session-login-form">
+      <div class="connect-card-title">
+        <span>${icon("shield")}</span>
+        <div>
+          <h3>恢复管理员会话</h3>
+          <p>管理员已创建，但当前浏览器没有有效会话。请先登录，再保存 Cloudflare 账号。</p>
+        </div>
+      </div>
+
+      <div class="setup-grid">
+        <label class="connect-field">
+          <span>用户名</span>
+          <input name="user" type="text" autocomplete="username" placeholder="admin" />
+        </label>
+        <label class="connect-field">
+          <span>密码</span>
+          <input name="password" type="password" autocomplete="current-password" placeholder="面板密码" />
+        </label>
+      </div>
+      <label class="connect-field">
+        <span>2FA 验证码</span>
+        <input name="auth" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 位动态验证码" />
+      </label>
+
+      <div class="connect-warning">
+        <strong>为什么需要这一步</strong>
+        <span>如果第一次创建管理员时浏览器没有保存 Cookie，第二步保存 Cloudflare 账号会缺少管理员会话。</span>
+      </div>
+
+      <button class="primary-button connect-submit" type="submit" ${state.setupLoginSubmitting ? "disabled" : ""}>
+        ${state.setupLoginSubmitting ? "登录中..." : "恢复会话并继续"}
+      </button>
+    </form>
+  `;
+}
+
 function renderCloudflareSetupBody() {
+  const canSubmitCloudflareAccounts = state.sessionAuthenticated && !state.setupSubmitting;
+
   return `
     <div class="connect-heading setup-heading">
       <span class="connect-kicker">第二步</span>
       <h2>添加 Cloudflare 账号</h2>
       <p>项目支持多账户管理，可一次添加多个 Cloudflare 账号，后续登录后在顶部切换。</p>
     </div>
+
+    ${renderSetupSessionRecovery()}
 
     <form class="connect-card setup-card setup-cloudflare-card" id="cloudflare-accounts-setup-form">
       <div class="connect-card-title">
@@ -135,8 +181,14 @@ function renderCloudflareSetupBody() {
         <span>至少添加一个 Cloudflare 账号后，面板才能读取域名和管理资源。</span>
       </div>
 
-      <button class="primary-button connect-submit" type="submit" ${state.setupSubmitting ? "disabled" : ""}>
-        ${state.setupSubmitting ? "保存中..." : "保存 Cloudflare 账号并进入面板"}
+      <button class="primary-button connect-submit" type="submit" ${canSubmitCloudflareAccounts ? "" : "disabled"}>
+        ${
+          state.setupSubmitting
+            ? "保存中..."
+            : state.sessionAuthenticated
+              ? "保存 Cloudflare 账号并进入面板"
+              : "请先恢复管理员会话"
+        }
       </button>
       ${state.sessionError ? `<div class="notice error-notice">${escapeHtml(state.sessionError)}</div>` : ""}
     </form>

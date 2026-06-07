@@ -99,12 +99,15 @@ docker compose logs -f
 
 ## HTTPS 与 Cookie
 
-`NODE_ENV=production` 时会话 Cookie 默认带 `Secure`。如果直接用 HTTP 访问生产容器，浏览器可能无法保存登录 Cookie。
+默认 Docker 镜像允许直接通过 `http://服务器IP:端口` 首次初始化；这种访问方式下会话 Cookie 不带 `Secure`，浏览器可以正常保存第 1 页创建管理员后的会话。
 
 推荐做法：
 
-- 生产环境：放在 HTTPS 反向代理后，设置 `PUBLIC_ORIGIN=https://你的域名`，并且只有反向代理会覆盖和清洗 `Host`、`X-Forwarded-Proto` 时才设置 `TRUST_PROXY_HEADERS=true`。
-- 本机调试：显式设置 `SECURE_COOKIES=false`。
+- 生产环境：放在 HTTPS 反向代理后，设置 `PUBLIC_ORIGIN=https://你的域名`，应用会自动给会话 Cookie 加 `Secure`。
+- 只有反向代理会覆盖和清洗 `Host`、`X-Forwarded-Proto` 时，才设置 `TRUST_PROXY_HEADERS=true`。
+- 如果必须强制所有会话 Cookie 带 `Secure`，设置 `SECURE_COOKIES=true`，并确保只通过 HTTPS 访问。
+
+如果你已经在旧版本中第 1 页创建了管理员，但第 2 页保存 Cloudflare 账号时提示“请先创建管理员账户并登录”，新版第 2 页会显示“恢复管理员会话”，用管理员用户名、密码和 2FA 登录后即可继续添加账号，不需要删除 SQLite。
 
 Nginx 示例：
 
