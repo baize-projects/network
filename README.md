@@ -8,7 +8,7 @@
 - SQLite 持久化：管理员密码使用 scrypt 哈希保存；2FA 密钥和 Cloudflare Global API Key 使用 AES-GCM 加密后保存到 SQLite。
 - 多账户管理：Cloudflare 账号保存在 SQLite，登录后可在顶部切换。
 - 域名管理：读取当前账号所有 Zone，展示域名、状态、区域 ID、套餐，并支持新增 Zone。
-- DNS 记录：读取、新增、编辑、删除和批量管理常用 DNS 记录。
+- DNS 记录：读取、新增、编辑、删除和批量管理常用 DNS 记录，支持按类型、域名和内容/IP 模糊搜索。
 - 单域名管理：提供 DNS、SSL/TLS、缓存、防火墙、统计分析、页面规则、证书管理页面。
 - 一键加速：配置访问域名、源站域名、优选域名和 Cloudflare for SaaS 相关流程。
 - Workers 与开发资源：管理 Workers、Pages、D1、R2、KV、Cloudflare Tunnels 和 Worker 模板库。
@@ -60,6 +60,8 @@ http://服务器IP:3000
 5. 保存后进入管理面板，后续可在顶部切换当前 Cloudflare 账号。
 
 默认直接通过 `http://服务器IP:3000` 访问时，初始化会话 Cookie 不带 `Secure`，浏览器可以保存第 1 页后的管理员会话。如果旧版本卡在第 2 页并提示“请先创建管理员账户并登录”，新版会显示“恢复管理员会话”，用管理员账号、密码和 2FA 登录后即可继续添加 Cloudflare 账号。
+
+如果生成 2FA 登录密钥时提示“请求来源校验失败”，通常是 `PUBLIC_ORIGIN` 与当前访问地址不一致，或 HTTPS 反向代理没有正确传递并启用可信代理头。直连 IP 时保持 `PUBLIC_ORIGIN=`、`TRUST_PROXY_HEADERS=false`；HTTPS 反代时设置完整外部地址，例如 `PUBLIC_ORIGIN=https://panel.example.com`。详见 [Docker 部署文档](./DEPLOYMENT.md#https-与-cookie)。
 
 不再通过 `.env`、`USER/PASSWORD/AUTH`、`EMAILn/CF_APIn` 配置敏感信息。
 

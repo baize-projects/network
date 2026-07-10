@@ -22,6 +22,37 @@ test("same origin checks do not trust forwarded proto unless explicitly enabled"
   );
 });
 
+test("trusted proxy origin checks use forwarded host and direct TLS safely", () => {
+  const proxiedRequest = {
+    headers: {
+      host: "internal:3000",
+      origin: "https://panel.example.com",
+      "x-forwarded-host": "panel.example.com",
+      "x-forwarded-proto": "https",
+    },
+    socket: {},
+  };
+
+  assert.equal(expectedRequestOrigin(proxiedRequest), "http://internal:3000");
+  assert.equal(sameOriginRequest(proxiedRequest), false);
+  assert.equal(
+    expectedRequestOrigin(proxiedRequest, { trustProxyHeaders: true }),
+    "https://panel.example.com"
+  );
+  assert.equal(sameOriginRequest(proxiedRequest, { trustProxyHeaders: true }), true);
+
+  const directTlsRequest = {
+    headers: {
+      host: "panel.example.com",
+      origin: "https://panel.example.com",
+    },
+    socket: { encrypted: true },
+  };
+
+  assert.equal(expectedRequestOrigin(directTlsRequest), "https://panel.example.com");
+  assert.equal(sameOriginRequest(directTlsRequest), true);
+});
+
 test("same origin checks prefer an explicit public origin in production", () => {
   const request = {
     headers: {

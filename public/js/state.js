@@ -82,6 +82,8 @@ export const state = {
   dnsFormOpen: false,
   dnsBulkFormOpen: false,
   dnsBulkText: "",
+  dnsSearchQuery: "",
+  dnsSearchZoneId: "",
   selectedDnsRecordIds: [],
   savingDns: false,
   savingDnsBulk: false,
@@ -265,6 +267,8 @@ export function resetCloudflareAccountData() {
   state.dnsFormOpen = false;
   state.dnsBulkFormOpen = false;
   state.dnsBulkText = "";
+  state.dnsSearchQuery = "";
+  state.dnsSearchZoneId = "";
   state.selectedDnsRecordIds = [];
   state.savingDns = false;
   state.savingDnsBulk = false;

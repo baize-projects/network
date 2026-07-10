@@ -778,7 +778,10 @@ export function createApiRouter({
           ) {
             return {
               statusCode: 403,
-              body: { error: "请求来源校验失败。" },
+              body: {
+                error:
+                  "请求来源校验失败。请确认当前访问地址与 PUBLIC_ORIGIN 一致；HTTPS 反向代理需正确配置 PUBLIC_ORIGIN 或可信代理头。",
+              },
             };
           }
 

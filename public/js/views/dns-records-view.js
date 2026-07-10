@@ -2,7 +2,7 @@ import { icon } from "../icons.js";
 import { state } from "../state.js";
 import { escapeHtml, ttlLabel } from "../utils.js";
 
-export function renderDnsRecords() {
+export function renderDnsRecords(records = state.dnsRecords) {
   if (state.loadingDns) {
     return `
       <div class="empty-state dns-empty">
@@ -31,6 +31,20 @@ export function renderDnsRecords() {
     `;
   }
 
+  if (records.length === 0) {
+    return `
+      <div class="empty-state dns-empty">
+        <strong>未找到匹配的 DNS 记录</strong>
+        <span>可以搜索记录类型、域名、目标地址或 IP。</span>
+      </div>
+    `;
+  }
+
+  const visibleRecordIds = records.map((record) => record.id);
+  const allVisibleSelected = visibleRecordIds.every((id) =>
+    state.selectedDnsRecordIds.includes(id)
+  );
+
   return `
     <div class="dns-table">
       <div class="dns-header">
@@ -39,7 +53,7 @@ export function renderDnsRecords() {
             id="dns-select-all"
             type="checkbox"
             aria-label="选择全部 DNS 记录"
-            ${state.dnsRecords.length > 0 && state.selectedDnsRecordIds.length === state.dnsRecords.length ? "checked" : ""}
+            ${allVisibleSelected ? "checked" : ""}
           />
         </span>
         <span>类型</span>
@@ -48,7 +62,7 @@ export function renderDnsRecords() {
         <span>代理状态</span>
         <span></span>
       </div>
-      ${state.dnsRecords
+      ${records
         .map(
           (record) => `
             <div class="dns-row">

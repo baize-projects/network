@@ -82,8 +82,8 @@ services:
       DATA_DIR: /data
       SESSION_TTL_DAYS: "30"
       SECURE_COOKIES: "false"
-      PUBLIC_ORIGIN: "https://panel.example.com"
-      TRUST_PROXY_HEADERS: "true"
+      PUBLIC_ORIGIN: ""
+      TRUST_PROXY_HEADERS: "false"
       ENABLE_D1_SQL_CONSOLE: "false"
 
 volumes:
@@ -107,6 +107,16 @@ docker compose logs -f
 - 只有反向代理会覆盖和清洗 `Host`、`X-Forwarded-Proto` 时，才设置 `TRUST_PROXY_HEADERS=true`。
 - 如果必须强制所有会话 Cookie 带 `Secure`，设置 `SECURE_COOKIES=true`，并确保只通过 HTTPS 访问。
 
+上面的 Compose 示例默认按 `http://服务器IP:3000` 直连配置。如果已经启用 HTTPS 反向代理，再把环境变量改成：
+
+```yaml
+environment:
+  PUBLIC_ORIGIN: "https://你的面板域名"
+  TRUST_PROXY_HEADERS: "true"
+```
+
+`PUBLIC_ORIGIN` 必须与浏览器地址栏中的协议、域名和非标准端口完全一致。不要原样使用示例域名 `panel.example.com`；否则生成 2FA 密钥等 POST 请求会提示“请求来源校验失败”。可信代理模式同时支持代理传入的 `X-Forwarded-Host` 和 `X-Forwarded-Proto`。
+
 如果你已经在旧版本中第 1 页创建了管理员，但第 2 页保存 Cloudflare 账号时提示“请先创建管理员账户并登录”，新版第 2 页会显示“恢复管理员会话”，用管理员用户名、密码和 2FA 登录后即可继续添加账号，不需要删除 SQLite。
 
 Nginx 示例：
@@ -115,6 +125,7 @@ Nginx 示例：
 location / {
   proxy_pass http://127.0.0.1:3000;
   proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-Host $host;
   proxy_set_header X-Forwarded-Proto $scheme;
   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 }

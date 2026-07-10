@@ -3423,3 +3423,43 @@ node --test test/smoke.test.js
   - 保存后弹窗自动关闭，账号切换为“浏览器新增账号”；
   - 域名列表从 `first.example` 切换到 `third.example`；
   - 页面文本未出现演示 Global API Key。
+
+## 2026-07-11 DNS 记录搜索与初始化来源校验诊断
+
+用户根据 GitHub Issue 要求在单域名 DNS 记录区增加搜索框，支持按记录类型、IP 和域名模糊检索；同时反馈首次初始化生成 2FA 密钥一直提示“请求来源校验失败”。
+
+DNS 搜索实现：
+
+- 新增 `public/js/dns-record-filter.js` 纯函数模块：
+  - 大小写不敏感；
+  - 支持空格分词；
+  - 匹配记录 `type`、`name` 和 `content`，覆盖类型、记录域名、目标域名与 IP。
+- DNS 标题区新增紧凑搜索框和“显示数量 / 总数量”计数。
+- 搜索无结果时显示独立空状态，不与“当前域名确实没有 DNS 记录”混淆。
+- 全选和批量删除只作用于当前筛选结果；改变搜索条件时会移除不可见记录的选中状态，避免误删隐藏记录。
+- 搜索条件在刷新当前域名记录时保留，切换到其他 Zone 时自动清空。
+- 桌面和移动端均完成布局适配，移动端搜索框与工具区等宽。
+
+图二根因：
+
+- `/api/setup/secret` 是 POST 请求，会先经过同源校验，再进入 TOTP 密钥生成逻辑。
+- 如果 `PUBLIC_ORIGIN` 与浏览器地址栏中的协议、主机或端口不一致，请求会在生成密钥前返回 403“请求来源校验失败”。
+- 旧 Docker Compose 示例预填了 `PUBLIC_ORIGIN=https://panel.example.com`。用户如果原样复制配置，却通过 `http://服务器IP:3000` 访问，就会稳定复现截图中的错误。
+- HTTPS 反向代理使用内部 `Host`，但没有设置正确的 `PUBLIC_ORIGIN`，或没有传递/信任 `X-Forwarded-Host`、`X-Forwarded-Proto`，也会触发相同问题。
+
+来源校验修复：
+
+- 继续优先使用显式 `PUBLIC_ORIGIN`，不放宽任意 Origin。
+- 仅在 `TRUST_PROXY_HEADERS=true` 时读取并校验 `X-Forwarded-Host` 和 `X-Forwarded-Proto`。
+- 原生 TLS 连接会按 HTTPS 计算期望来源。
+- 403 错误改为可操作提示，直接指向 `PUBLIC_ORIGIN` 和可信代理配置。
+- Docker Compose 默认示例改为 IP 直连安全配置：`PUBLIC_ORIGIN=""`、`TRUST_PROXY_HEADERS=false`。
+- 部署文档新增 HTTPS 反代环境变量和 Nginx `X-Forwarded-Host` 配置。
+
+验证：
+
+- `node --test test/*.test.js`：65 个测试全部通过。
+- 所有 `src/`、`public/js/`、`test/` JavaScript 文件通过 `node --check`。
+- 新增回归覆盖：类型/IP/域名/多关键词搜索、筛选后批量选择边界、可信代理转发主机、原生 TLS、`PUBLIC_ORIGIN` 与浏览器地址不一致时的 `/api/setup/secret` 403。
+- 浏览器隔离 mock 验证：桌面筛选显示 `1 / 3`；390px 移动端搜索框和工具区均为 328px；页面无横向溢出；筛选后只显示 1 条匹配记录。
+- `git diff --check` 和敏感信息扫描通过。

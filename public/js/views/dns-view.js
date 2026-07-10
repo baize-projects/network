@@ -1,4 +1,5 @@
 import { icon } from "../icons.js";
+import { filterDnsRecords } from "../dns-record-filter.js";
 import { state } from "../state.js";
 import { escapeHtml, planLabel, statusLabel } from "../utils.js";
 import { renderDnsBulkForm } from "./dns-bulk-form-view.js";
@@ -31,7 +32,12 @@ export function renderZoneSummary(zone, { description = "管理此域名的 DNS 
 
 export function renderDnsView() {
   const zone = state.selectedZone || { id: "", name: "", status: "", plan: null };
-  const selectedCount = state.selectedDnsRecordIds.length;
+  const filteredRecords = filterDnsRecords(state.dnsRecords, state.dnsSearchQuery);
+  const visibleRecordIds = new Set(filteredRecords.map((record) => record.id));
+  const selectedCount = state.selectedDnsRecordIds.filter((id) => visibleRecordIds.has(id)).length;
+  const resultLabel = state.dnsSearchQuery
+    ? `显示 ${filteredRecords.length} / ${state.dnsRecords.length}`
+    : `${state.dnsRecords.length} 条记录`;
 
   return `
     ${renderZoneSummary(zone, { detail: `${state.dnsRecords.length} 条 DNS 记录` })}
@@ -53,15 +59,31 @@ export function renderDnsView() {
 
     <section class="panel dns-records-panel">
       <div class="dns-record-title">
-        <h2>DNS 记录</h2>
-        <div class="selected-counter">
-          <span>已选 ${selectedCount} / ${state.dnsRecords.length}</span>
-          <button class="danger-button" type="button" id="bulk-delete-dns" ${selectedCount === 0 || state.deletingDnsBulk ? "disabled" : ""}>
-            ${state.deletingDnsBulk ? "删除中" : "批量删除"}
-          </button>
+        <div class="dns-record-heading">
+          <h2>DNS 记录</h2>
+          <span>${escapeHtml(resultLabel)}</span>
+        </div>
+        <div class="dns-record-tools">
+          <label class="dns-record-search" for="dns-record-search">
+            ${icon("search")}
+            <input
+              id="dns-record-search"
+              type="search"
+              autocomplete="off"
+              placeholder="搜索类型、名称或内容 / IP"
+              aria-label="搜索 DNS 记录"
+              value="${escapeHtml(state.dnsSearchQuery)}"
+            />
+          </label>
+          <div class="selected-counter">
+            <span>已选 ${selectedCount} / ${filteredRecords.length}</span>
+            <button class="danger-button" type="button" id="bulk-delete-dns" ${selectedCount === 0 || state.deletingDnsBulk ? "disabled" : ""}>
+              ${state.deletingDnsBulk ? "删除中" : "批量删除"}
+            </button>
+          </div>
         </div>
       </div>
-      ${renderDnsRecords()}
+      ${renderDnsRecords(filteredRecords)}
     </section>
   `;
 }

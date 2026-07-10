@@ -1,9 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { parseDnsBulkText } from "../public/js/actions/dns-actions.js";
+import { createDnsActions, parseDnsBulkText } from "../public/js/actions/dns-actions.js";
 import { createSessionActions } from "../public/js/actions/session-actions.js";
+import { filterDnsRecords } from "../public/js/dns-record-filter.js";
 import { renderConnectView } from "../public/js/views/connect-view.js";
+import { renderDnsView } from "../public/js/views/dns-view.js";
 import { renderShell } from "../public/js/views/shell-view.js";
 import {
   ApiUnavailableError,
@@ -81,6 +83,108 @@ test("DNS bulk text parser supports quoted TXT content and MX shorthand", () => 
     () => parseDnsBulkText("TXT @ v=spf1 include:_spf.example.com ~all 1 extra"),
     /字段过多/
   );
+});
+
+test("DNS search matches type, IP, domain, and multiple fuzzy terms", () => {
+  const records = [
+    { id: "a", type: "A", name: "api.alpha.example", content: "192.0.2.10" },
+    { id: "b", type: "AAAA", name: "www.alpha.example", content: "2001:db8::10" },
+    { id: "c", type: "CNAME", name: "shop.alpha.example", content: "target.example.net" },
+  ];
+
+  assert.deepEqual(filterDnsRecords(records, "aaaa").map((record) => record.id), ["b"]);
+  assert.deepEqual(filterDnsRecords(records, "192.0.2").map((record) => record.id), ["a"]);
+  assert.deepEqual(filterDnsRecords(records, "TARGET.EXAMPLE").map((record) => record.id), ["c"]);
+  assert.deepEqual(filterDnsRecords(records, "a 192.0").map((record) => record.id), ["a"]);
+  assert.deepEqual(filterDnsRecords(records, "   "), records);
+  assert.deepEqual(filterDnsRecords(null, "api"), []);
+});
+
+test("DNS search UI filters rows and bulk selection only targets visible records", () => {
+  const previousDocument = global.document;
+  const previousState = {
+    dnsError: state.dnsError,
+    dnsFormOpen: state.dnsFormOpen,
+    dnsBulkFormOpen: state.dnsBulkFormOpen,
+    dnsRecords: state.dnsRecords,
+    dnsSearchQuery: state.dnsSearchQuery,
+    deletingDnsBulk: state.deletingDnsBulk,
+    loadingDns: state.loadingDns,
+    notice: state.notice,
+    selectedDnsRecordIds: state.selectedDnsRecordIds,
+    selectedZone: state.selectedZone,
+    savingDnsBulk: state.savingDnsBulk,
+  };
+  const records = [
+    { id: "a", type: "A", name: "api.alpha.example", content: "192.0.2.10", ttl: 1 },
+    { id: "b", type: "AAAA", name: "www.alpha.example", content: "2001:db8::10", ttl: 1 },
+    { id: "c", type: "CNAME", name: "shop.alpha.example", content: "target.example.net", ttl: 1 },
+  ];
+  const searchInput = {
+    focusCalled: 0,
+    selection: [],
+    focus() {
+      this.focusCalled += 1;
+    },
+    setSelectionRange(start, end) {
+      this.selection = [start, end];
+    },
+  };
+  let renderCount = 0;
+
+  global.document = {
+    querySelector(selector) {
+      assert.equal(selector, "#dns-record-search");
+      return searchInput;
+    },
+  };
+
+  const actions = createDnsActions({
+    renderApp() {
+      renderCount += 1;
+    },
+  });
+
+  try {
+    state.selectedZone = {
+      id: "1".repeat(32),
+      name: "alpha.example",
+      status: "active",
+      plan: { name: "Free" },
+    };
+    state.dnsRecords = records;
+    state.dnsSearchQuery = "2001";
+    state.selectedDnsRecordIds = ["a", "b"];
+    state.loadingDns = false;
+    state.dnsError = "";
+    state.notice = "";
+    state.dnsFormOpen = false;
+    state.dnsBulkFormOpen = false;
+    state.savingDnsBulk = false;
+    state.deletingDnsBulk = false;
+
+    const html = renderDnsView();
+
+    assert.match(html, /id="dns-record-search"/);
+    assert.match(html, /显示 1 \/ 3/);
+    assert.match(html, /2001:db8::10/);
+    assert.doesNotMatch(html, /192\.0\.2\.10/);
+
+    actions.searchDnsRecords({ currentTarget: { value: "target.example" } });
+    assert.equal(state.dnsSearchQuery, "target.example");
+    assert.deepEqual(state.selectedDnsRecordIds, []);
+    assert.equal(searchInput.focusCalled, 1);
+    assert.deepEqual(searchInput.selection, [14, 14]);
+
+    actions.toggleAllDnsRecords({ target: { checked: true } });
+    assert.deepEqual(state.selectedDnsRecordIds, ["c"]);
+    actions.toggleAllDnsRecords({ target: { checked: false } });
+    assert.deepEqual(state.selectedDnsRecordIds, []);
+    assert.equal(renderCount, 3);
+  } finally {
+    Object.assign(state, previousState);
+    global.document = previousDocument;
+  }
 });
 
 test("session startup keeps the login screen clean when API is static HTML", async () => {

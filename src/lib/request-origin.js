@@ -22,10 +22,36 @@ function firstHeaderValue(value = "") {
   return String(value || "").split(",")[0].trim();
 }
 
-function normalizeProto(value = "") {
+function normalizeHost(value = "") {
+  const host = firstHeaderValue(value);
+
+  if (!host) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(`http://${host}`);
+
+    if (
+      parsed.username ||
+      parsed.password ||
+      parsed.pathname !== "/" ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      return "";
+    }
+
+    return parsed.host;
+  } catch {
+    return "";
+  }
+}
+
+function normalizeProto(value = "", fallback = "http") {
   const proto = firstHeaderValue(value).toLowerCase();
 
-  return proto === "https" ? "https" : "http";
+  return ["http", "https"].includes(proto) ? proto : fallback;
 }
 
 export function expectedRequestOrigin(request, { publicOrigin = "", trustProxyHeaders = false } = {}) {
@@ -35,15 +61,20 @@ export function expectedRequestOrigin(request, { publicOrigin = "", trustProxyHe
     return configuredOrigin;
   }
 
-  const host = String(request?.headers?.host || "").trim();
+  const directHost = normalizeHost(request?.headers?.host || "");
+  const forwardedHost = trustProxyHeaders
+    ? normalizeHost(request?.headers?.["x-forwarded-host"] || "")
+    : "";
+  const host = forwardedHost || directHost;
 
   if (!host) {
     return "";
   }
 
+  const directProto = request?.socket?.encrypted ? "https" : "http";
   const proto = trustProxyHeaders
-    ? normalizeProto(request?.headers?.["x-forwarded-proto"] || "")
-    : "http";
+    ? normalizeProto(request?.headers?.["x-forwarded-proto"] || "", directProto)
+    : directProto;
 
   return `${proto}://${host}`;
 }

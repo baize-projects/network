@@ -134,6 +134,31 @@
     display: grid;
   }
 
+  .dns-record-heading {
+    align-items: baseline;
+  }
+
+  .dns-record-title,
+  .dns-record-tools,
+  .selected-counter {
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dns-record-tools {
+    display: grid;
+    gap: 10px;
+  }
+
+  .dns-record-search {
+    width: 100%;
+  }
+
+  .selected-counter .danger-button {
+    width: 100%;
+  }
+
   .zone-id-large {
     max-width: 100%;
     overflow: hidden;

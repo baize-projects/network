@@ -51,6 +51,9 @@ export function bindEvents(actions) {
     .querySelector("#bulk-delete-dns")
     ?.addEventListener("click", actions.deleteSelectedDnsRecords);
   document
+    .querySelector("#dns-record-search")
+    ?.addEventListener("input", actions.searchDnsRecords);
+  document
     .querySelector("#dns-select-all")
     ?.addEventListener("change", actions.toggleAllDnsRecords);
   document.querySelectorAll(".dns-select-record").forEach((input) => {

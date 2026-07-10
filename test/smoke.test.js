@@ -368,6 +368,39 @@ test("requires the one-time setup token before exposing TOTP setup secret", asyn
   }
 });
 
+test("setup secret reports an actionable error when public origin mismatches the browser", async () => {
+  const panelPort = await allocatePanelPort();
+  const panel = startPanel({
+    PORT: String(panelPort),
+    CLOUDFLARE_EMAIL: "",
+    CLOUDFLARE_GLOBAL_API_KEY: "",
+    PUBLIC_ORIGIN: "https://panel.example.com",
+    SETUP_TOKEN: "origin-check-setup-token",
+  });
+
+  try {
+    const browserOrigin = `http://127.0.0.1:${panelPort}`;
+    await waitForHttp(`${browserOrigin}/`);
+
+    const response = await fetch(`${browserOrigin}/api/setup/secret`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: browserOrigin,
+      },
+      body: JSON.stringify({ setupToken: "origin-check-setup-token" }),
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 403);
+    assert.match(payload.error, /请求来源校验失败/);
+    assert.match(payload.error, /PUBLIC_ORIGIN/);
+    assert.equal(Object.hasOwn(payload, "secret"), false);
+  } finally {
+    await panel.stop();
+  }
+});
+
 test("rate limits setup secret requests before exposing the TOTP seed", async () => {
   const panelPort = await allocatePanelPort();
   const panel = startPanel({

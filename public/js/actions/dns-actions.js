@@ -7,6 +7,7 @@ import {
   updateDnsRecord,
 } from "../api.js";
 import { proxiableTypes } from "../constants.js";
+import { filterDnsRecords } from "../dns-record-filter.js";
 import { collectDnsForm, fillDnsFormFromRecord } from "../forms/dns-form.js";
 import { resetDnsBulkForm, resetDnsForm, state } from "../state.js";
 
@@ -177,6 +178,11 @@ export function createDnsActions({ renderApp }) {
   async function loadDnsRecords() {
     if (!state.selectedZone?.id) {
       return;
+    }
+
+    if (state.dnsSearchZoneId !== state.selectedZone.id) {
+      state.dnsSearchQuery = "";
+      state.dnsSearchZoneId = state.selectedZone.id;
     }
 
     state.loadingDns = true;
@@ -373,10 +379,40 @@ export function createDnsActions({ renderApp }) {
   }
 
   function toggleAllDnsRecords(event) {
-    state.selectedDnsRecordIds = event.target.checked
-      ? state.dnsRecords.map((record) => record.id)
-      : [];
+    const visibleRecordIds = new Set(
+      filterDnsRecords(state.dnsRecords, state.dnsSearchQuery).map((record) => record.id)
+    );
+    const selectedIds = new Set(state.selectedDnsRecordIds);
+
+    for (const recordId of visibleRecordIds) {
+      if (event.target.checked) {
+        selectedIds.add(recordId);
+      } else {
+        selectedIds.delete(recordId);
+      }
+    }
+
+    state.selectedDnsRecordIds = [...selectedIds].filter((id) =>
+      state.dnsRecords.some((record) => record.id === id)
+    );
     renderApp();
+  }
+
+  function searchDnsRecords(event) {
+    const query = String(event?.currentTarget?.value || "");
+    const visibleRecordIds = new Set(
+      filterDnsRecords(state.dnsRecords, query).map((record) => record.id)
+    );
+
+    state.dnsSearchQuery = query;
+    state.selectedDnsRecordIds = state.selectedDnsRecordIds.filter((id) =>
+      visibleRecordIds.has(id)
+    );
+    renderApp();
+
+    const input = document.querySelector("#dns-record-search");
+    input?.focus();
+    input?.setSelectionRange(query.length, query.length);
   }
 
   async function deleteSelectedDnsRecords() {
@@ -418,6 +454,7 @@ export function createDnsActions({ renderApp }) {
     openDnsBulkForm,
     resetDnsForm: resetDnsFormAction,
     saveDnsRecord,
+    searchDnsRecords,
     syncDnsFormType,
     submitDnsBulk,
     toggleAllDnsRecords,
